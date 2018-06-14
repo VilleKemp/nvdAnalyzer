@@ -8,6 +8,98 @@ import json
 import sys
 import pickle
 
+
+
+#Dictionary of values you want to search for in the database
+search_for={'cve_index': 0, 'cpe':0, 'cpe22Uri': {'amount':0,'flag':0, 'list':{}, 'potential_list': {}}, 'cpe23Uri': {'amount':0,'flag':0, 'list' : {}, 'potential_list': {}}, 'description_data': {'amount':0,'flag':0}, 'reference_data': {'amount': 0, 'flag':0, 'list': {}}, 'version_data': {'amount': 0, 'flag' : 0}}
+
+def process(field, content):
+    if field == 'version_data':
+        if(content[0]['version_value'] != '-'  and search_for['version_data']['flag'] ==0 ):
+            #Idea is to capture one versio data per cve. Therefore the flag is set when version data is first met in the cve.
+            search_for['version_data']['flag'] +=1
+            search_for['version_data']['amount'] += 1
+    
+    if field == 'cpe23Uri':
+        if search_for['cpe23Uri']['flag']==0:
+            search_for['cpe23Uri']['flag']+=1
+            search_for['cpe23Uri']['amount']+=1
+            if(content not in search_for['cpe23Uri']['list']):
+                search_for['cpe23Uri']['list'][content]=1
+            elif(content in search_for['cpe23Uri']['list']):
+                search_for['cpe23Uri']['list'][content]+=1                                        
+
+        elif(content not in search_for['cpe23Uri']['list']):
+            search_for['cpe23Uri']['list'][content]=1
+        elif(content in search_for['cpe23Uri']['list']):
+            search_for['cpe23Uri']['list'][content]+=1 
+     
+
+    if field == 'cpe22Uri':
+        if search_for['cpe22Uri']['flag']==0:
+            search_for['cpe22Uri']['flag']+=1
+            search_for['cpe22Uri']['amount']+=1                  
+            if(content not in search_for['cpe22Uri']['list']):
+                search_for['cpe22Uri']['list'][content]=1
+            elif(content in search_for['cpe22Uri']['list']):
+                search_for['cpe22Uri']['list'][content]+=1                                        
+
+        elif(content not in search_for['cpe22Uri']['list']):
+            search_for['cpe22Uri']['list'][content]=1
+        elif(content in search_for['cpe22Uri']['list']):
+            search_for['cpe22Uri']['list'][content]+=1
+
+
+    if field == 'description_data':
+        if search_for['description_data']['flag']==0:
+            search_for['description_data']['flag']+=1
+            search_for['description_data']['amount']+=1         
+            
+                            
+
+def process_upper_level(field,content):
+    if field == 'description_data':
+        if search_for['description_data']['flag']==0:
+            for lists in content: 
+                for value in lists:
+                    if value == 'value':
+                        search_for['description_data']['flag']+=1
+                        search_for['description_data']['amount']+=1     
+    
+    if field == 'reference_data':
+        for dicts in content:
+            for value in dicts:
+                if value == 'refsource' and dicts[value] not in search_for['reference_data']['list']:
+                    search_for['reference_data']['list'][dicts[value]]=1
+                elif value == 'refsource' and dicts[value] in search_for['reference_data']['list']:
+                    dicts[value]
+                    search_for['reference_data']['list'][dicts[value]]+=1                                         
+            
+        
+        
+def iterate(d):
+    for k, v in d.items():
+        #print(k)
+        if k in search_for:
+            process_upper_level(k,v)
+        if isinstance(v, dict):
+            iterate(v)
+        elif isinstance(v, list):
+            for x in v:
+                #print(x)
+                iterate(x)
+        else:
+            if k in search_for:
+           
+                process(k,v)        
+                                            
+def reset(d):
+    search_for['version_data']['flag'] =0
+    search_for['cpe22Uri']['flag'] =0 
+    search_for['cpe23Uri']['flag'] =0 
+    search_for['description_data']['flag']=0        
+    
+
 def analysis(cve_dict):
     cpe = 0
     cpe22=0
@@ -21,10 +113,18 @@ def analysis(cve_dict):
     potential23=[]
     potential_cve_amount22=[]
     potential_cve_amount23=[]
+
+    
     print("Parsing...") 
     integers=['0','1','2','3','4','5','6','7','8','9']
     #description_data[] is always size 1. Why is it even a list?
+    
     for i in range(0,len(cve_dict['CVE_Items'])):
+        search_for['cve_index']=i
+        reset(search_for)
+        iterate(cve_dict['CVE_Items'][i])        
+    '''   
+     #Dumb parsing. Rework with iterate function
         if 'configurations' in cve_dict['CVE_Items'][i]:
             if "nodes" in cve_dict['CVE_Items'][i]["configurations"]:
                 if len(cve_dict['CVE_Items'][i]["configurations"]["nodes"]) != 0:
@@ -73,33 +173,62 @@ def analysis(cve_dict):
                             if ref['refsource'] in refsource:
                                 refsource[ref['refsource']] +=1
                             else:
-                                refsource[ref['refsource']] = 1    
+                                refsource[ref['refsource']] = 1
+    '''
+    '''         
+            if 'affects' in cve_dict['CVE_Items'][i]['cve']:
+                if 'vendor' in cve_dict['CVE_Items'][i]['cve']['affects']:
+                    if 'vendor_data' in cve_dict['CVE_Items'][i]['cve']['affects']['vendor']:
+                        for item in cve_dict['CVE_Items'][i]['cve']['affects']['vendor']['vendor_data']:
+    '''                           
+                
+
+         
+    ##Potential cpe with version info
+    for st in search_for['cpe23Uri']['list']:                      
+        for char in range(6,len(st)):
+            if(char+2 < len(st)):
+                if st[char] in integers and st[char+1] == ('.' or ',') and st[char+2] in integers:
+                    if st not in search_for['cpe23Uri']['potential_list']:
+                        search_for['cpe23Uri']['potential_list'][st]=search_for['cpe23Uri']['list'][st]
+                    
+    for st in search_for['cpe22Uri']['list']:
                             
-            
-    print("Amount of files parsed: {}".format(len(cve_dict['CVE_Items'])))   
-    print("Number of files that had cpe field: {}".format(cpe))
-    print("Number of files that had cpe22Uri field: {}".format(cpe22))
-    print("Number of files that had cpe23Uri field: {}".format(cpe23))
+        for char in range(3,len(st)):
+            if(char+2 < len(st)):
+                if st[char] in integers and st[char+1] == ('.' or ',') and st[char+2] in integers:
+                    if st not in search_for['cpe22Uri']['potential_list']:
+                        search_for['cpe22Uri']['potential_list'][st]=search_for['cpe22Uri']['list'][st]
+                                            
+                          
+   
+    #         
+                
+    print("Amount of files parsed: {}".format(search_for['cve_index']+1))   
+    #print("Number of files that had cpe field: {}".format(cpe))
+    print("Number of files that had cpe22Uri field: {}".format(search_for['cpe22Uri']['amount']))
+    print("Number of files that had cpe23Uri field: {}".format(search_for['cpe23Uri']['amount']))
     print("\nNumber of files that had references field: {}".format(contain_ref))
     print("Total amount of references: {}".format(total_ref)) 
-    print("\nTotal amount of descriptions: {}".format(desc))
-    print("Times description_data[] was larger than 1: {}".format(desc1))
-    print("\nDatabase contains {} different types of reference sources.\nSource types:".format(len(refsource)))
-    print('In {} cve there are in total {} different cpe22 strings that might contain version info  '.format(len(potential_cve_amount22),len(potential22)))
-    print('In {} cve there are in total {} different cpe23 strings that might contain version info  '.format(len(potential_cve_amount23),len(potential23)))
+    print("\nTotal amount of descriptions: {}".format(search_for['description_data']['amount']))
+    print("\nDatabase contains {} different types of reference sources.".format(len(search_for['reference_data']['list'])))
+    print('Out of {} unique cpe22 strings there are in total {} different cpe22 strings that might contain version info  '.format(len(search_for['cpe22Uri']['list']),len(search_for['cpe22Uri']['potential_list'])))
+    print('Out of {} unique cpe23 there are in total {} different cpe23 strings that might contain version info  '.format(len(search_for['cpe23Uri']['list']),len(search_for['cpe23Uri']['potential_list'])))
+   
+    #print(search_for)
     #Extra printing and saving options
     try:
         
         if'-p22' in sys.argv:
-            for string in potential22:
+            for string in search_for['cpe22Uri']['potential_list']:
                 print(string)
         if '-p23' in sys.argv:
-            for string in potential23:
+            for string in search_for['cpe23Uri']['potential_list']:
                 print(string)
         if '-ps' in sys.argv:
             print("Source name #Appearances")
-            for ref in refsource:
-                print("{} #{}".format(ref,refsource[ref]))
+            for ref,val in search_for['reference_data']['list'].items():
+                print("{} #{}".format(ref,val))
         if '-s' in sys.argv:
             print('Saved potential cpe strings')
             save_obj(potential22,'potential22')
@@ -109,6 +238,7 @@ def analysis(cve_dict):
         print('')    
  
 
+            
 
 def JSONdump(cve_dict,number):    
     print(json.dumps(cve_dict['CVE_Items'][number], sort_keys=True, indent=4, separators=(',', ': ')))
