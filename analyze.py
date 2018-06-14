@@ -10,9 +10,35 @@ import pickle
 
 
 
-#Dictionary of values you want to search for in the database
-search_for={'cve_index': 0, 'cpe':0, 'cpe22Uri': {'amount':0,'flag':0, 'list':{}, 'potential_list': {}}, 'cpe23Uri': {'amount':0,'flag':0, 'list' : {}, 'potential_list': {}}, 'description_data': {'amount':0,'flag':0}, 'reference_data': {'amount': 0, 'flag':0, 'list': {}}, 'version_data': {'amount': 0, 'flag' : 0}}
+'''
+Dictionary
+Documentation WIP
+'''
+search_for={'cve_index': 0,
+            'cpe':0, 
+            'cpe22Uri': {'amount':0,'flag':0, 'list':{}, 'potential_list': {}},
+            'cpe23Uri': {'amount':0,'flag':0, 'list' : {}, 'potential_list': {}},
+            'description_data': {'amount':0,'flag':0, 'list':{}}, 
+            'reference_data': {'amount': 0, 'flag':0, 'list': {}, 'url':[], 'uniq_url': {}}, 
+            'version_data': {'amount': 0, 'flag' : 0}}
 
+def save_unique(field,content):
+    if search_for[field]['flag']==0:
+        search_for[field]['flag']+=1
+        search_for[field]['amount']+=1                  
+        if(content not in search_for[field]['list']):
+            search_for[field]['list'][content]=1
+        else:
+            search_for[field]['list'][content]+=1                                        
+
+    elif(content not in search_for[field]['list']):
+        search_for[field]['list'][content]=1
+    else:
+        search_for[field]['list'][content]+=1
+
+'''
+Processing
+'''
 def process(field, content):
     if field == 'version_data':
         if(content[0]['version_value'] != '-'  and search_for['version_data']['flag'] ==0 ):
@@ -21,50 +47,33 @@ def process(field, content):
             search_for['version_data']['amount'] += 1
     
     if field == 'cpe23Uri':
-        if search_for['cpe23Uri']['flag']==0:
-            search_for['cpe23Uri']['flag']+=1
-            search_for['cpe23Uri']['amount']+=1
-            if(content not in search_for['cpe23Uri']['list']):
-                search_for['cpe23Uri']['list'][content]=1
-            elif(content in search_for['cpe23Uri']['list']):
-                search_for['cpe23Uri']['list'][content]+=1                                        
-
-        elif(content not in search_for['cpe23Uri']['list']):
-            search_for['cpe23Uri']['list'][content]=1
-        elif(content in search_for['cpe23Uri']['list']):
-            search_for['cpe23Uri']['list'][content]+=1 
+        save_unique(field,content)
      
-
     if field == 'cpe22Uri':
-        if search_for['cpe22Uri']['flag']==0:
-            search_for['cpe22Uri']['flag']+=1
-            search_for['cpe22Uri']['amount']+=1                  
-            if(content not in search_for['cpe22Uri']['list']):
-                search_for['cpe22Uri']['list'][content]=1
-            elif(content in search_for['cpe22Uri']['list']):
-                search_for['cpe22Uri']['list'][content]+=1                                        
-
-        elif(content not in search_for['cpe22Uri']['list']):
-            search_for['cpe22Uri']['list'][content]=1
-        elif(content in search_for['cpe22Uri']['list']):
-            search_for['cpe22Uri']['list'][content]+=1
+        save_unique(field, content)
 
 
-    if field == 'description_data':
+   # if field == 'description_data':
+    #    save_unique(field,content)
+        '''
         if search_for['description_data']['flag']==0:
             search_for['description_data']['flag']+=1
             search_for['description_data']['amount']+=1         
-            
+        '''      
                             
-
+'''
+In these cases the dictionary field contains a list or a dictionary.
+Therefore it has to be called in the different place than the above function
+'''
 def process_upper_level(field,content):
     if field == 'description_data':
-        if search_for['description_data']['flag']==0:
-            for lists in content: 
-                for value in lists:
-                    if value == 'value':
-                        search_for['description_data']['flag']+=1
-                        search_for['description_data']['amount']+=1     
+            
+        for lists in content: 
+            for value in lists:
+                if value == 'value' and search_for['description_data']['flag']==0::
+                    
+                search_for['description_data']['flag']+=1
+                search_for['description_data']['amount']+=1     
     
     if field == 'reference_data':
         for dicts in content:
@@ -73,10 +82,16 @@ def process_upper_level(field,content):
                     search_for['reference_data']['list'][dicts[value]]=1
                 elif value == 'refsource' and dicts[value] in search_for['reference_data']['list']:
                     dicts[value]
-                    search_for['reference_data']['list'][dicts[value]]+=1                                         
+                    search_for['reference_data']['list'][dicts[value]]+=1
+                elif value == 'url':
+                    #code could be shorter if everything was done with logic like this?
+                    search_for[field][value].append(dicts[value])                                           
             
         
-        
+'''
+Iteration function
+Call process or process_upper when field matches a value in search_for 
+'''        
 def iterate(d):
     for k, v in d.items():
         #print(k)
@@ -93,6 +108,9 @@ def iterate(d):
            
                 process(k,v)        
                                             
+'''
+Reset flags
+'''
 def reset(d):
     search_for['version_data']['flag'] =0
     search_for['cpe22Uri']['flag'] =0 
@@ -101,90 +119,23 @@ def reset(d):
     
 
 def analysis(cve_dict):
-    cpe = 0
-    cpe22=0
-    cpe23=0
-    contain_ref=0
-    total_ref=0
-    desc=0
-    desc1=0
-    refsource={}
-    potential22=[]
-    potential23=[]
-    potential_cve_amount22=[]
-    potential_cve_amount23=[]
-
-    
     print("Parsing...") 
     integers=['0','1','2','3','4','5','6','7','8','9']
     #description_data[] is always size 1. Why is it even a list?
-    
+    '''
+    Parser loop
+        Go over each cve in the dictionary.
+    '''
     for i in range(0,len(cve_dict['CVE_Items'])):
         search_for['cve_index']=i
         reset(search_for)
-        iterate(cve_dict['CVE_Items'][i])        
-    '''   
-     #Dumb parsing. Rework with iterate function
-        if 'configurations' in cve_dict['CVE_Items'][i]:
-            if "nodes" in cve_dict['CVE_Items'][i]["configurations"]:
-                if len(cve_dict['CVE_Items'][i]["configurations"]["nodes"]) != 0:
-                    if 'cpe' in cve_dict['CVE_Items'][i]["configurations"]["nodes"][0]:
-                        cpe=cpe+1 
-                        if "cpe22Uri" in cve_dict['CVE_Items'][i]["configurations"]["nodes"][0]['cpe'][0]:
-                            cpe22=cpe22+1
-                            #check if uri contans int + , or . + int
-                            string = cve_dict['CVE_Items'][i]["configurations"]["nodes"][0]['cpe'][0]['cpe22Uri']
-                            #skip the initial cpe part of the string
-                            for char in range(3,len(string)):
-                                if(char+2 < len(string)):
-                                    if string[char] in integers and string[char+1] == ('.' or ',') and string[char+2] in integers:
-                                        if string not in potential22:                                        
-                                            potential22.append(string)
-                                        if i not in potential_cve_amount22:
-                                            potential_cve_amount22.append(i)
+        iterate(cve_dict['CVE_Items'][i])                  
 
-                        if "cpe23Uri" in cve_dict['CVE_Items'][i]["configurations"]["nodes"][0]['cpe'][0]:
-                            cpe23=cpe23+1
-                            #check if uri contans int + , or . + int
-                            string = cve_dict['CVE_Items'][i]["configurations"]["nodes"][0]['cpe'][0]['cpe23Uri']
-                            #string starts with cpe:2.3. skip that by starting from 6                            
-                            for char in range(6,len(string)):
-                                if(char+2 < len(string)):
-                                    if string[char] in integers and string[char+1] == ('.' or ',') and string[char+2] in integers:
-                                        if i not in potential_cve_amount23:
-                                            potential_cve_amount23.append(i)
-                                        if string not in potential23:
-                                            potential23.append(string)
-        if 'cve' in cve_dict['CVE_Items'][i]:
-            if 'description' in cve_dict['CVE_Items'][i]['cve']:
-                if 'description_data' in cve_dict['CVE_Items'][i]['cve']['description']:
-                    if len(cve_dict['CVE_Items'][i]['cve']['description']['description_data'])>1:
-                        desc1+=1
-                    if len(cve_dict['CVE_Items'][i]['cve']['description']['description_data'])!=0:
-                        desc+=1
-                        #acces to description data. Maybe parse this with keywords?
-            if 'references' in cve_dict['CVE_Items'][i]['cve']:
-                if 'reference_data' in cve_dict['CVE_Items'][i]['cve']['references']:
-                    if cve_dict['CVE_Items'][i]['cve']['references']['reference_data'] != 0:
-                        contain_ref = contain_ref+1
-                        #roll through all ref. Maybe use these to download the source file?
-                        for ref in cve_dict['CVE_Items'][i]['cve']['references']['reference_data']:
-                            total_ref = total_ref+1
-                            if ref['refsource'] in refsource:
-                                refsource[ref['refsource']] +=1
-                            else:
-                                refsource[ref['refsource']] = 1
     '''
+    After parsing operations
     '''         
-            if 'affects' in cve_dict['CVE_Items'][i]['cve']:
-                if 'vendor' in cve_dict['CVE_Items'][i]['cve']['affects']:
-                    if 'vendor_data' in cve_dict['CVE_Items'][i]['cve']['affects']['vendor']:
-                        for item in cve_dict['CVE_Items'][i]['cve']['affects']['vendor']['vendor_data']:
-    '''                           
-                
-
-         
     ##Potential cpe with version info
+    #if cpe string contain <int>.<int> it is likely that there is a version code in it. These can potentially be used to get the specific version of the software.
     for st in search_for['cpe23Uri']['list']:                      
         for char in range(6,len(st)):
             if(char+2 < len(st)):
@@ -200,23 +151,35 @@ def analysis(cve_dict):
                     if st not in search_for['cpe22Uri']['potential_list']:
                         search_for['cpe22Uri']['potential_list'][st]=search_for['cpe22Uri']['list'][st]
                                             
-                          
+    #Unique urls
+    #Split the url with '/' and take the part between 'https://' and first /. Should capture the source site relatively well                           
+    for site in search_for['reference_data']['url']:
+        site = site.split('/')[2]
+        if site not in search_for['reference_data']['uniq_url']:
+            search_for['reference_data']['uniq_url'][site]=1
+        else:
+            search_for['reference_data']['uniq_url'][site]+=1                   
+
    
-    #         
-                
+    '''         
+    All prints here       
+    '''         
     print("Amount of files parsed: {}".format(search_for['cve_index']+1))   
     #print("Number of files that had cpe field: {}".format(cpe))
     print("Number of files that had cpe22Uri field: {}".format(search_for['cpe22Uri']['amount']))
     print("Number of files that had cpe23Uri field: {}".format(search_for['cpe23Uri']['amount']))
-    print("\nNumber of files that had references field: {}".format(contain_ref))
-    print("Total amount of references: {}".format(total_ref)) 
+    #print("\nNumber of files that had references field: {}".format(contain_ref))
+    #print("Total amount of references: {}".format(total_ref)) 
     print("\nTotal amount of descriptions: {}".format(search_for['description_data']['amount']))
     print("\nDatabase contains {} different types of reference sources.".format(len(search_for['reference_data']['list'])))
     print('Out of {} unique cpe22 strings there are in total {} different cpe22 strings that might contain version info  '.format(len(search_for['cpe22Uri']['list']),len(search_for['cpe22Uri']['potential_list'])))
     print('Out of {} unique cpe23 there are in total {} different cpe23 strings that might contain version info  '.format(len(search_for['cpe23Uri']['list']),len(search_for['cpe23Uri']['potential_list'])))
-   
-    #print(search_for)
+
+    print('Saved {} site links and detected {} unique urls'.format(len(search_for['reference_data']['url']), len(search_for['reference_data']['uniq_url'])))
+    
+    '''
     #Extra printing and saving options
+    '''
     try:
         
         if'-p22' in sys.argv:
@@ -233,7 +196,11 @@ def analysis(cve_dict):
             print('Saved potential cpe strings')
             save_obj(potential22,'potential22')
             save_obj(potential23, 'potential23')
-        
+        if '-u' in sys.argv:
+            for string in search_for['reference_data']['uniq_url']:
+                print(string)        
+            
+
     except IndexError:
         print('')    
  
@@ -287,9 +254,9 @@ def help(max_size):
     print(' -r          : reload dictionary from json files')
     print(' -a          : Analysis')
     print(' -a -s       : Save potential cpe strings to a file')
-    print(' -a -p22|p23 : Print cpe22 or cpe23 sting')
+    print(' -a -p22|p23 : Print potential cpe22 or cpe23 stings')
     print(' -a -ps      : Print source types')
-
+    print(' -a -u       : Print unique urls')
 def main():
 
     
