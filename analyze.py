@@ -1,5 +1,5 @@
 '''
-Done on top of the solution show in https://avleonov.com/2017/10/03/downloading-and-analyzing-nvd-cve-feed/
+NVD database parser. 
 '''
 from os import listdir
 from os.path import isfile, join
@@ -21,20 +21,61 @@ search_for={'cve_index': 0,
             'description_data': {'amount':0,'flag':0, 'list':{}}, 
             'reference_data': {'amount': 0, 'flag':0, 'list': {}, 'url':[], 'uniq_url': {}}, 
             'version_data': {'amount': 0, 'flag' : 0},
-            'problemtype_data': {'amount': 0, 'flag': 0, 'list':{}}}
-
+            'problemtype_data': {'amount': 0, 'flag': 0, 'list':{}},
+            'baseMetricV3': {
+                'amount':0,
+                'flag': 0,
+                "attackComplexity": {},
+                "attackVector": {},
+                "availabilityImpact": {},
+                "baseScore": {},
+                "baseSeverity": {},
+                "confidentialityImpact": {},
+                "integrityImpact": {},
+                "privilegesRequired": {},
+                "scope": {},
+                "userInteraction": {},
+                "exploitabilityScore":{} ,
+                "impactScore": {},
+                "vectorString": {},
+                "version": {}
+                    },
+             "baseMetricV2": {
+                'amount': 0,
+                'flag': 0,
+                "accessComplexity": {},
+                "accessVector": {},
+                "authentication": {},
+                "availabilityImpact": {},
+                "baseScore": {},
+                "confidentialityImpact": {},
+                "integrityImpact": {},
+                "vectorString": {},
+                "version": {},
+            
+                "exploitabilityScore": {},
+                "impactScore": {},
+                "obtainAllPrivilege": {},
+                "obtainOtherPrivilege": {},
+                "obtainUserPrivilege": {},
+                "severity": {},
+                "userInteractionRequired": {}
+            }
+            }
+'''
+Print basic cwe info. Expand if needed
+'''
 def cwe_information(cwe_dict,cid):
     name,desc,ext_desc = cwe_description(cwe_dict,cid)
     print('CWE-{}'.format(cid))
     print('Name: {}'.format(name))
     print('Description: {}'.format(desc))
     print('Extra description: {}'.format(ext_desc))
-
-def cwe_description(cwe_dict,cid):
-    '''
-    Get cwe description from xml file. IDs seem to be in one of two places. Therefore 2 loops
+'''
+Get cwe description from xml file. IDs seem to be in one of two places. Therefore 2 loops
     
-    '''
+'''
+def cwe_description(cwe_dict,cid):
     
     for weakness in range(len(cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'])):
         if cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'][weakness]['@ID'] == cid:
@@ -135,6 +176,27 @@ def process_upper_level(field,content):
                     if search_for['problemtype_data']['flag']==0:
                         search_for['problemtype_data']['amount']+=1
                         search_for['problemtype_data']['flag']=1      
+                        
+                        
+    if field == 'baseMetricV2' or field == 'baseMetricV3':
+        if search_for[field]['flag'] ==0:
+            search_for[field]['amount']+=1
+            search_for[field]['flag']==1
+        for key,value in content.items():
+            if isinstance(value,dict):
+                for key2,value2 in value.items():
+                    if value2 not in search_for[field][key2]:
+                        search_for[field][key2][value2]=1
+                    else:
+                        search_for[field][key2][value2]+=1
+            else:
+                if value not in search_for[field][key]:
+                        search_for[field][key][value]=1
+                else:
+                        search_for[field][key][value]+=1        
+                    
+            
+            
                      
 		
 				
@@ -156,18 +218,26 @@ def iterate(d):
         else:
             if k in search_for:
            
-                process(k,v)        
+                process(k,v)    
+                
+  
                                             
 '''
 Reset flags
 '''
 def reset(d):
-    search_for['version_data']['flag'] =0
-    search_for['cpe22Uri']['flag'] =0 
-    search_for['cpe23Uri']['flag'] =0 
-    search_for['description_data']['flag']=0
-    search_for['problemtype_data']['flag']=0        
-    
+    #search_for['version_data']['flag'] =0
+    #search_for['cpe22Uri']['flag'] =0 
+    #search_for['cpe23Uri']['flag'] =0 
+    #search_for['description_data']['flag']=0
+   # search_for['problemtype_data']['flag']=0        
+    for x,y in search_for.items():
+        if isinstance(y,dict):
+            for i in y:
+                if i == 'flag':
+                    
+                    search_for[x][i]=0
+            
 
 def analysis(cve_dict,cwe_dict):
     '''
@@ -233,10 +303,11 @@ def analysis(cve_dict,cwe_dict):
     
     print('Total of {} cve had a problemtype_data value field. There were {} different types of cwe'.format(search_for['problemtype_data']['amount'],len(search_for['problemtype_data']['list']) ))
         
+    print('{} cve contained V2 impact information'.format(search_for['baseMetricV2']['amount']))
+    print('{} cve contained V3 impact information'.format(search_for['baseMetricV3']['amount']))
     
     
     
-    #print(cwe.keys())
    
     '''
     #Extra printing and saving options
@@ -267,8 +338,33 @@ def analysis(cve_dict,cwe_dict):
                 name,desc,edesc = cwe_description(cwe_dict,ref.replace('CWE-',''))
                 
                 print("{} #{} {}".format(ref,val, name))
+                
+        if '-i2' in sys.argv:
+            #In this context this data is useless
+            del search_for['baseMetricV2']['vectorString']
+            del search_for['baseMetricV2']['flag']
+            del search_for['baseMetricV2']['amount']
+           
+            
+            for value,content in search_for['baseMetricV2'].items():
+                print('\n{}\nValue name, Appearances in all cves'.format(value))
+                for value2,content2 in content.items():
+                    print(value2,content2)
+            
+        if '-i3' in sys.argv:
+            #In this context this data is useless
+            del search_for['baseMetricV3']['vectorString']
+            del search_for['baseMetricV3']['flag']
+            del search_for['baseMetricV3']['amount']
+           
+            
+            for value,content in search_for['baseMetricV3'].items():
+                print('\n{}\nValue name, Appearances in all cves'.format(value))
+                for value2,content2 in content.items():
+                    print(value2,content2)
+            
     except IndexError:
-        print('')    
+        print('Error happened')    
  
 
             
@@ -294,7 +390,9 @@ def save_obj(obj, name ):
 def load_obj(name):
     with open(name + '.pkl', 'rb') as f:
         return pickle.load(f)
-
+'''
+https://avleonov.com/2017/10/03/downloading-and-analyzing-nvd-cve-feed/
+'''
 def create_dict():
     files = [f for f in listdir("json/") if isfile(join("json/", f))]
     files.sort()
@@ -326,12 +424,14 @@ def help(max_size):
     print(' -j <number> : Shows a jsondump of a cve number <number>. Number is a dict index not actual cve number. Max number is {}'.format(max_size-1))
     print(' -l          : Loop version of -j that keeps asking for numbers')
     print(' -r          : reload dictionary from json files')
+    print(' -c <number> : Basic information about cwe-<number>')
     print(' -a          : Analysis')
     print(' -a -s       : Save potential cpe strings to a file')
     print(' -a -p22|p23 : Print potential cpe22 or cpe23 stings')
     print(' -a -ps      : Print source types')
     print(' -a -u       : Print unique urls')
     print(' -a -t       : Print cwes and their appearance amounts')
+    print(' -a -i2|i3   : Print impact information')
 def main():
 
     
