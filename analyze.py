@@ -7,7 +7,7 @@ import zipfile
 import json
 import sys
 import pickle
-
+import xmltodict
 
 
 '''
@@ -20,7 +20,42 @@ search_for={'cve_index': 0,
             'cpe23Uri': {'amount':0,'flag':0, 'list' : {}, 'potential_list': {}},
             'description_data': {'amount':0,'flag':0, 'list':{}}, 
             'reference_data': {'amount': 0, 'flag':0, 'list': {}, 'url':[], 'uniq_url': {}}, 
-            'version_data': {'amount': 0, 'flag' : 0}}
+            'version_data': {'amount': 0, 'flag' : 0},
+            'problemtype_data': {'amount': 0, 'flag': 0, 'list':{}}}
+
+def cwe_information(cwe_dict,cid):
+    name,desc,ext_desc = cwe_description(cwe_dict,cid)
+    print('CWE-{}'.format(cid))
+    print('Name: {}'.format(name))
+    print('Description: {}'.format(desc))
+    print('Extra description: {}'.format(ext_desc))
+
+def cwe_description(cwe_dict,cid):
+    '''
+    Get cwe description from xml file. IDs seem to be in one of two places. Therefore 2 loops
+    
+    '''
+    
+    for weakness in range(len(cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'])):
+        if cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'][weakness]['@ID'] == cid:
+            name = cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'][weakness]['@Name']
+            desc = cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'][weakness]['Description']
+            try:
+                ext_desc = cwe_dict['Weakness_Catalog']['Weaknesses']['Weakness'][weakness]['Extended_Description']
+            except KeyError:
+                ext_desc = ''
+            return name , desc, ext_desc
+         
+    
+    for category in range(len(cwe_dict['Weakness_Catalog']['Categories']['Category'])):
+        if cwe_dict['Weakness_Catalog']['Categories']['Category'][category]['@ID'] == cid:
+            name= cwe_dict['Weakness_Catalog']['Categories']['Category'][category]['Summary']
+            desc = ''
+            ext_desc = ''
+            return name,desc,ext_desc
+    
+    return '','',''
+    
 
 def save_unique(field,content):
     if search_for[field]['flag']==0:
@@ -70,10 +105,10 @@ def process_upper_level(field,content):
             
         for lists in content: 
             for value in lists:
-                if value == 'value' and search_for['description_data']['flag']==0::
+                if value == 'value' and search_for['description_data']['flag']==0:
                     
-                search_for['description_data']['flag']+=1
-                search_for['description_data']['amount']+=1     
+                	search_for['description_data']['flag']+=1
+                	search_for['description_data']['amount']+=1     
     
     if field == 'reference_data':
         for dicts in content:
@@ -88,6 +123,21 @@ def process_upper_level(field,content):
                     search_for[field][value].append(dicts[value])                                           
             
         
+    if field == 'problemtype_data':
+        for dicts in content:
+            for lists in dicts:
+                
+                for values in dicts[lists]:
+                    if values['value'] not in search_for['problemtype_data']['list']:
+                        search_for['problemtype_data']['list'][values['value']]=1
+                    else:
+                        search_for['problemtype_data']['list'][values['value']]+=1
+                    if search_for['problemtype_data']['flag']==0:
+                        search_for['problemtype_data']['amount']+=1
+                        search_for['problemtype_data']['flag']=1      
+                     
+		
+				
 '''
 Iteration function
 Call process or process_upper when field matches a value in search_for 
@@ -115,10 +165,14 @@ def reset(d):
     search_for['version_data']['flag'] =0
     search_for['cpe22Uri']['flag'] =0 
     search_for['cpe23Uri']['flag'] =0 
-    search_for['description_data']['flag']=0        
+    search_for['description_data']['flag']=0
+    search_for['problemtype_data']['flag']=0        
     
 
-def analysis(cve_dict):
+def analysis(cve_dict,cwe_dict):
+    '''
+    Parse through the data and gather + print potentially interesting things
+    '''
     print("Parsing...") 
     integers=['0','1','2','3','4','5','6','7','8','9']
     #description_data[] is always size 1. Why is it even a list?
@@ -177,6 +231,13 @@ def analysis(cve_dict):
 
     print('Saved {} site links and detected {} unique urls'.format(len(search_for['reference_data']['url']), len(search_for['reference_data']['uniq_url'])))
     
+    print('Total of {} cve had a problemtype_data value field. There were {} different types of cwe'.format(search_for['problemtype_data']['amount'],len(search_for['problemtype_data']['list']) ))
+        
+    
+    
+    
+    #print(cwe.keys())
+   
     '''
     #Extra printing and saving options
     '''
@@ -199,8 +260,13 @@ def analysis(cve_dict):
         if '-u' in sys.argv:
             for string in search_for['reference_data']['uniq_url']:
                 print(string)        
-            
-
+        if '-t' in sys.argv:
+            print("Problem type #Appearances Type")
+            for ref,val in search_for['problemtype_data']['list'].items():
+                
+                name,desc,edesc = cwe_description(cwe_dict,ref.replace('CWE-',''))
+                
+                print("{} #{} {}".format(ref,val, name))
     except IndexError:
         print('')    
  
@@ -246,6 +312,14 @@ def create_dict():
     print("CVE_data_format: " + str(cve_dict['CVE_data_format']))
     print("CVE_data_numberOfCVEs: " + str(cve_dict['CVE_data_numberOfCVEs']))
     print("CVE_data_type: " + str(cve_dict['CVE_data_type']))
+    
+    cwefile= open('cwec_v3.1.xml','r')
+    xml = cwefile.read()
+    cwefile.close()
+    cwe_dict = xmltodict.parse(xml)
+    save_obj(cwe_dict,'cwe_dict')
+    
+    
 
 def help(max_size):
     print('Commands:')
@@ -257,6 +331,7 @@ def help(max_size):
     print(' -a -p22|p23 : Print potential cpe22 or cpe23 stings')
     print(' -a -ps      : Print source types')
     print(' -a -u       : Print unique urls')
+    print(' -a -t       : Print cwes and their appearance amounts')
 def main():
 
     
@@ -274,6 +349,7 @@ def main():
     
     try:
         cve_dict=load_obj('cve_dict')
+        cwe_dict = load_obj('cwe_dict')
         if sys.argv[1] == '-j':
             JSONdump(cve_dict,int(sys.argv[2]))
         elif sys.argv[1] == '-l':
@@ -281,9 +357,11 @@ def main():
         elif sys.argv[1] == '-r':
             create_dict()
         elif sys.argv[1] == '-a':
-            analysis(cve_dict)
+            analysis(cve_dict,cwe_dict)
         elif sys.argv[1]== '-h':
-            help(len(cve_dict['CVE_Items']))  
+            help(len(cve_dict['CVE_Items'])) 
+        elif '-c' in sys.argv:
+            cwe_information(cwe_dict,sys.argv[2]) 
         else:
             help(len(cve_dict['CVE_Items']))
     except IndexError:
